@@ -107,7 +107,7 @@ void BufMgr::unPinPage(File& file, const PageId pageNo, const bool dirty) {
       }
 
     } else if (bufDescTable[frameNumber].pinCnt == 0) {
-      throw PagePinnedException(file.filename_, pageNo, frameNumber);
+      throw PageNotPinnedException(file.filename_, pageNo, frameNumber);
     }
 
   } catch(HashNotFoundException& e){
