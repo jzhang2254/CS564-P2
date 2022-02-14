@@ -39,15 +39,60 @@ BufMgr::BufMgr(std::uint32_t bufs)
 }
 
 void BufMgr::advanceClock() {
-  clockHand = (clockHand + 1) % numBufs;
+  clockHand += 1;
+  clockHand = clockHand % numBufs;
 }
 
-void BufMgr::allocBuf(FrameId& frame) {}
+void BufMgr::allocBuf(FrameId& frame) {
+  
+  while(true){
+    advanceClock();
+    
+    if(!bufDescTable[clockHand].valid){
+      bufDescTable[clockHand].Set(bufDescTable[clockHand].file, bufDescTable[clockHand].pageNo);
+      frame = clockHand;
+      break;
+    }
+    
+    if(bufDescTable[clockHand].refbit == 1){
+      bufDescTable[clockHand].refbit = 0;
+      continue;
+    }
+    
+    if(bufDescTable[clockHand].pinCnt != 0){
+      continue;
+    }
+    
+    if(bufDescTable[clockHand].dirty){
+      bufDescTable[clockHand].file.writePage(bufPool[clockHand]);
+    }
+    
+    bufDescTable[clockHand].Set(bufDescTable[clockHand].file, bufDescTable[clockHand].pageNo);
+    frame = clockHand;
+    break;
+  }
+  
+}
 
-void BufMgr::readPage(File& file, const PageId pageNo, Page*& page) {}
+void BufMgr::readPage(File& file, const PageId pageNo, Page*& page) {
+  FrameId frameNum;
+   try {
+    hashTable.lookup(file, pageNo, frameNum);
+    bufDescTable[frameNum].refbit = 1;
+    bufDescTable[frameNum].pinCnt += 1;
+    page = &bufPool[frameNum];
+  } catch (const HashNotFoundException &) {
+      allocBuf(frameNum);
+      bufPool[frameNum] = file.readPage(pageNo);
+      hashTable.insert(file, pageNo, frameNum);
+      bufDescTable[frameNum].Set(file, pageNo);
+      page = &bufPool[frameNum];
+  }
+  
+}
 
 void BufMgr::unPinPage(File& file, const PageId pageNo, const bool dirty) {
-  FrameId frameNumber;
+   FrameId frameNumber;
   try {
     // attempt to look up page in hashtable
     hashTable.lookup(file, pageNo, frameNumber);
@@ -74,21 +119,27 @@ void BufMgr::allocPage(File& file, PageId& pageNo, Page*& page) {
   allocBuf(frameNumber);
   // allocate new page for file and setup the page number
   bufPool[frameNumber] = file.allocatePage();
-  pageNo = page->page_number();
+  
+  pageNo = bufPool[frameNumber].page_number(); //can't use page here
 
   // insert entry into has
+  
   hashTable.insert(file, pageNo, frameNumber);
   // set frame up properly
+  
   bufDescTable[frameNumber].Set(file, pageNo);
-
+  
   // return page to the caller
   page = &bufPool[frameNumber];
+  
 }
 
-void BufMgr::flushFile(File& file) {}
+void BufMgr::flushFile(File& file) {
+//TODO:
+}
 
 void BufMgr::disposePage(File& file, const PageId PageNo) {
-  FrameId frameNumber;
+    FrameId frameNumber;
   try {
     file.deletePage(PageNo);
 
