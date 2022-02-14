@@ -68,6 +68,7 @@ void BufMgr::allocBuf(FrameId& frame) {
     }
     
     bufDescTable[clockHand].Set(bufDescTable[clockHand].file, bufDescTable[clockHand].pageNo);
+    hashTable.remove(bufDescTable[clockHand].file, bufDescTable[clockHand].pageNo);
     frame = clockHand;
     break;
   }
