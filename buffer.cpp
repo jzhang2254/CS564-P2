@@ -16,6 +16,7 @@
 #include "exceptions/hash_not_found_exception.h"
 #include "exceptions/page_not_pinned_exception.h"
 #include "exceptions/page_pinned_exception.h"
+#include "exceptions/invalid_page_exception.h"
 
 namespace badgerdb {
 
@@ -44,7 +45,19 @@ void BufMgr::advanceClock() {
 }
 
 void BufMgr::allocBuf(FrameId& frame) {
+  //check if there's any empty frame left in the buffer
+  int allPinned = 1;
+  for(int i = 0; i < (int)numBufs; i++){
+    if(bufDescTable[i].pinCnt == 0){
+      allPinned = 0;
+    }
+  }
   
+  if(allPinned == 1){
+    throw BufferExceededException();
+  }
+  
+  //the clock starts to run
   while(true){
     advanceClock();
     
@@ -82,12 +95,18 @@ void BufMgr::readPage(File& file, const PageId pageNo, Page*& page) {
     bufDescTable[frameNum].refbit = 1;
     bufDescTable[frameNum].pinCnt += 1;
     page = &bufPool[frameNum];
-  } catch (const HashNotFoundException &) {
-      allocBuf(frameNum);
-      bufPool[frameNum] = file.readPage(pageNo);
-      hashTable.insert(file, pageNo, frameNum);
-      bufDescTable[frameNum].Set(file, pageNo);
-      page = &bufPool[frameNum];
+  } catch (const HashNotFoundException &e) {
+      try{
+        allocBuf(frameNum);
+        bufPool[frameNum] = file.readPage(pageNo);
+        hashTable.insert(file, pageNo, frameNum);
+        bufDescTable[frameNum].Set(file, pageNo);
+        page = &bufPool[frameNum];
+        
+      }catch (const InvalidPageException &e){ //not sure if this is allowed, but it works for now...
+        bufDescTable[frameNum].clear();
+        throw;
+      }
   }
   
 }
@@ -136,7 +155,7 @@ void BufMgr::allocPage(File& file, PageId& pageNo, Page*& page) {
 }
 
 void BufMgr::flushFile(File& file) {
-//TODO:
+//TODO: FINISH ME!
 }
 
 void BufMgr::disposePage(File& file, const PageId PageNo) {
